@@ -84,10 +84,12 @@ class FeignClientFactoryBean
 	}
 
 	protected Feign.Builder feign(FeignContext context) {
+		// 从 Feign 上下文中获取 FeignLoggerFactory，我认为实际就是从 IOC 容器中获取的
 		FeignLoggerFactory loggerFactory = get(context, FeignLoggerFactory.class);
 		Logger logger = loggerFactory.create(this.type);
 
 		// @formatter:off
+		// 从 Feign 上下文中获取 Feign.Builder，并设置相应值
 		Feign.Builder builder = get(context, Feign.Builder.class)
 				// required values
 				.logger(logger)
@@ -96,17 +98,21 @@ class FeignClientFactoryBean
 				.contract(get(context, Contract.class));
 		// @formatter:on
 
+		// 从 FeignClientProperties 配置 Feign，
 		configureFeign(context, builder);
 
 		return builder;
 	}
 
 	protected void configureFeign(FeignContext context, Feign.Builder builder) {
+		// 从 IOC 中获取 FeignClientProperties
 		FeignClientProperties properties = this.applicationContext
 				.getBean(FeignClientProperties.class);
 		if (properties != null) {
 			if (properties.isDefaultToProperties()) {
+				// 从 Feign 上下文 FeignContext 中获取配置
 				configureUsingConfiguration(context, builder);
+				// 从 FeignClientProperties 中获取配置
 				configureUsingProperties(
 						properties.getConfig().get(properties.getDefaultConfig()),
 						builder);
@@ -129,14 +135,17 @@ class FeignClientFactoryBean
 
 	protected void configureUsingConfiguration(FeignContext context,
 			Feign.Builder builder) {
+		// 设置log级别
 		Logger.Level level = getOptional(context, Logger.Level.class);
 		if (level != null) {
 			builder.logLevel(level);
 		}
+		// 设置重试策略
 		Retryer retryer = getOptional(context, Retryer.class);
 		if (retryer != null) {
 			builder.retryer(retryer);
 		}
+		// 设置 feign 的错误 code 解析接口
 		ErrorDecoder errorDecoder = getOptional(context, ErrorDecoder.class);
 		if (errorDecoder != null) {
 			builder.errorDecoder(errorDecoder);
@@ -149,10 +158,12 @@ class FeignClientFactoryBean
 				builder.errorDecoder(factoryErrorDecoder);
 			}
 		}
+		// 超时时间设置，连接超时时间：connectTimeout 默认10s，请求请求超时时间：readTimeout 默认 60s
 		Request.Options options = getOptional(context, Request.Options.class);
 		if (options != null) {
 			builder.options(options);
 		}
+		// 拦截器设置，可以看出拦截器也是可以针对单独的 feignClient 设置
 		Map<String, RequestInterceptor> requestInterceptors = context
 				.getInstances(this.contextId, RequestInterceptor.class);
 		if (requestInterceptors != null) {
@@ -254,6 +265,7 @@ class FeignClientFactoryBean
 
 	protected <T> T loadBalance(Feign.Builder builder, FeignContext context,
 			HardCodedTarget<T> target) {
+		// 获得 FeignClient
 		Client client = getOptional(context, Client.class);
 		if (client != null) {
 			builder.client(client);
@@ -276,10 +288,15 @@ class FeignClientFactoryBean
 	 * information
 	 */
 	<T> T getTarget() {
+		// 获取 Feign 的上下文对象 FeignContext （这个对象是自动装配 FeignAutoConfiguration 而来）
+		// （做一个记号研究TraceFeignContext extends FeignContext,实际作用是 TraceFeignContext 属性 delegate =  FeignContext）
 		FeignContext context = this.applicationContext.getBean(FeignContext.class);
+		// 生成 builder 对象，用来生成 feign
 		Feign.Builder builder = feign(context);
 
+		// 判断生成的代理对象类型，如果 url 为空，则走负载均衡，生成有负载均衡功能的代理类
 		if (!StringUtils.hasText(this.url)) {
+			// url 使用域名形似所以有负载均衡
 			if (!this.name.startsWith("http")) {
 				this.url = "http://" + this.name;
 			}
@@ -287,9 +304,11 @@ class FeignClientFactoryBean
 				this.url = this.name;
 			}
 			this.url += cleanPath();
+			// 生成负载均衡代理类
 			return (T) loadBalance(builder, context,
 					new HardCodedTarget<>(this.type, this.name, this.url));
 		}
+		// url 存在那代表的意义是不是有具体的地址，所以没有负载均衡能力？以后测试一下
 		if (StringUtils.hasText(this.url) && !this.url.startsWith("http")) {
 			this.url = "http://" + this.url;
 		}
@@ -309,6 +328,7 @@ class FeignClientFactoryBean
 			builder.client(client);
 		}
 		Targeter targeter = get(context, Targeter.class);
+		// 生成默认代理类
 		return (T) targeter.target(this, builder, context,
 				new HardCodedTarget<>(this.type, this.name, url));
 	}

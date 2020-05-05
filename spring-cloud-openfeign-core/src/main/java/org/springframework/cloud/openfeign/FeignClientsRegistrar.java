@@ -243,21 +243,27 @@ class FeignClientsRegistrar
 			AnnotationMetadata annotationMetadata, Map<String, Object> attributes) {
 		// 1.获取类名称，也就是被 @FeignClient 注解修饰的接口
 		String className = annotationMetadata.getClassName();
+		// 2.使用 BeanDefinitionBuilder 构造bean：FeignClientFactoryBean
 		BeanDefinitionBuilder definition = BeanDefinitionBuilder
 				.genericBeanDefinition(FeignClientFactoryBean.class);
+		// 校验 Fallback 和 FallbackFactory （必须实现被 @FeignClient 这个接口）
 		validate(attributes);
+		// 3.添加 FeignClientFactoryBean 的各个属性值，以下赋值都支持 SPEL 表达式
 		definition.addPropertyValue("url", getUrl(attributes));
 		definition.addPropertyValue("path", getPath(attributes));
 		String name = getName(attributes);
 		definition.addPropertyValue("name", name);
+		// 获取优先级 contextId > serviceId > name > value ，校验合法性
 		String contextId = getContextId(attributes);
 		definition.addPropertyValue("contextId", contextId);
 		definition.addPropertyValue("type", className);
 		definition.addPropertyValue("decode404", attributes.get("decode404"));
 		definition.addPropertyValue("fallback", attributes.get("fallback"));
 		definition.addPropertyValue("fallbackFactory", attributes.get("fallbackFactory"));
+		// BY_TYPE 注入模型
 		definition.setAutowireMode(AbstractBeanDefinition.AUTOWIRE_BY_TYPE);
 
+		// 4.设置别名
 		String alias = contextId + "FeignClient";
 		AbstractBeanDefinition beanDefinition = definition.getBeanDefinition();
 
@@ -274,6 +280,7 @@ class FeignClientsRegistrar
 
 		BeanDefinitionHolder holder = new BeanDefinitionHolder(beanDefinition, className,
 				new String[] { alias });
+		// 5.注册 FeignClientFactoryBean 的 BeanDefinition
 		BeanDefinitionReaderUtils.registerBeanDefinition(holder, registry);
 	}
 
